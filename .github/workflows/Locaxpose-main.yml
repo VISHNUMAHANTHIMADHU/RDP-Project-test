@@ -1,0 +1,72 @@
+name: RDP-LOCALXPOSE
+
+on:
+  workflow_dispatch:
+
+jobs:
+  rdp:
+    runs-on: windows-latest
+    timeout-minutes: 3600
+
+    steps:
+      - name: Enable RDP & Firewall
+        run: |
+          Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server' `
+            -Name "fDenyTSConnections" -Value 0 -Force
+
+          Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' `
+            -Name "UserAuthentication" -Value 0 -Force
+
+          netsh advfirewall firewall add rule name="RDP" dir=in action=allow protocol=TCP localport=3389
+          Restart-Service TermService -Force
+
+      - name: Create RDP User
+        run: |
+          $chars = (
+            [char[]](65..90) +
+            [char[]](97..122) +
+            [char[]](48..57)
+          )
+
+          $password = -join (Get-Random -InputObject $chars -Count 16)
+          $secure = ConvertTo-SecureString $password -AsPlainText -Force
+
+          New-LocalUser -Name "RDP" -Password $secure -AccountNeverExpires
+          Add-LocalGroupMember -Group "Administrators" -Member "RDP"
+          Add-LocalGroupMember -Group "Remote Desktop Users" -Member "RDP"
+
+          echo "RDP_USER=RDP" >> $env:GITHUB_ENV
+          echo "RDP_PASS=$password" >> $env:GITHUB_ENV
+
+      - name: Install LocalXpose
+        run: |
+          Invoke-WebRequest `
+            https://localxpose.io/releases/lx-windows-amd64.exe `
+            -OutFile lx.exe
+
+      - name: Authenticate LocalXpose
+        run: |
+          .\lx.exe auth --token ${{ secrets.LOCALXPOSE_TOKEN }}
+
+      - name: Start LocalXpose TCP Tunnel (RDP)
+        run: |
+          Start-Process -NoNewWindow `
+            -FilePath ".\lx.exe" `
+            -ArgumentList "tunnel tcp --port 3389"
+
+          Start-Sleep -Seconds 10
+
+      - name: Show RDP Info & Keep Alive
+        run: |
+          Write-Host "========== RDP DETAILS =========="
+          Write-Host "Username : $env:RDP_USER"
+          Write-Host "Password : $env:RDP_PASS"
+          Write-Host ""
+          Write-Host "👉 LocalXpose dashboard lo"
+          Write-Host "👉 TCP tunnel address copy chey"
+          Write-Host "================================"
+
+          while ($true) {
+            Write-Host "[$(Get-Date)] RDP Active"
+            Start-Sleep 300
+          }
