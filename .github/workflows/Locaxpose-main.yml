@@ -9,6 +9,7 @@ jobs:
     timeout-minutes: 3600
 
     steps:
+      # 1️⃣ Enable RDP + Firewall
       - name: Enable RDP & Firewall
         run: |
           Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server' `
@@ -20,6 +21,7 @@ jobs:
           netsh advfirewall firewall add rule name="RDP" dir=in action=allow protocol=TCP localport=3389
           Restart-Service TermService -Force
 
+      # 2️⃣ Create RDP User
       - name: Create RDP User
         run: |
           $chars = (
@@ -38,17 +40,22 @@ jobs:
           echo "RDP_USER=RDP" >> $env:GITHUB_ENV
           echo "RDP_PASS=$password" >> $env:GITHUB_ENV
 
+      # 3️⃣ Install LocalXpose (FIXED URL)
       - name: Install LocalXpose
         run: |
           Invoke-WebRequest `
-            https://localxpose.io/releases/lx-windows-amd64.exe `
+            https://github.com/localxpose/localxpose/releases/latest/download/lx-windows-amd64.exe `
             -OutFile lx.exe
 
+          .\lx.exe version
+
+      # 4️⃣ Authenticate LocalXpose
       - name: Authenticate LocalXpose
         run: |
           .\lx.exe auth --token ${{ secrets.LOCALXPOSE_TOKEN }}
 
-      - name: Start LocalXpose TCP Tunnel (RDP)
+      # 5️⃣ Start TCP Tunnel for RDP
+      - name: Start LocalXpose TCP Tunnel
         run: |
           Start-Process -NoNewWindow `
             -FilePath ".\lx.exe" `
@@ -56,14 +63,15 @@ jobs:
 
           Start-Sleep -Seconds 10
 
-      - name: Show RDP Info & Keep Alive
+      # 6️⃣ Show Details & Keep Runner Alive
+      - name: RDP Info & Keep Alive
         run: |
           Write-Host "========== RDP DETAILS =========="
           Write-Host "Username : $env:RDP_USER"
           Write-Host "Password : $env:RDP_PASS"
           Write-Host ""
-          Write-Host "👉 LocalXpose dashboard lo"
-          Write-Host "👉 TCP tunnel address copy chey"
+          Write-Host "👉 LocalXpose Dashboard open chey"
+          Write-Host "👉 Active TCP tunnel address copy chey"
           Write-Host "================================"
 
           while ($true) {
